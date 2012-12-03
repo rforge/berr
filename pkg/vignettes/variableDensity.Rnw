@@ -1,0 +1,438 @@
+\documentclass{article}
+
+\usepackage{fullpage}
+
+%\VignetteIndexEntry{An optimal penalty for breakpoint detection in signals with variable sampling density}
+
+\usepackage{natbib}
+\newcommand{\argmin}{\operatorname*{arg\, min}}
+
+\usepackage{amsmath,amssymb}
+\newcommand{\RR}{\mathbb R}
+
+\begin{document}
+
+\title{An optimal penalty for breakpoint detection in signals with
+  variable sampling density}
+\author{Toby Dylan Hocking}
+\maketitle
+
+In this vignette, we use the breakpointError to derive an optimal
+penalty for breakpoint detection in signals of varying sampling
+density. First, we will present an empirical analysis of several
+simulated signals using the breakpointError. Then, we will discuss the
+relationship of our results to relevant theoretical results. This
+analysis was originally presented by \citet[Chapter 4]{hocking-phd}.
+
+In recent years, several authors have developed a theory of minimal
+penalties that can be used to accurately recover a signal from noisy
+observations \citep{calibration,lebarbier}. These methods can be used
+offline to analyze some assumptions about the signal and the noise of
+the data. Typically, these results guarantee recovery of the correct
+signal with high probability. However, in this vignette we are more
+interested in accurate recovery of the breakpoints than the signal
+itself. So here we use the breakpointError to directly attack the
+problem of breakpoint detection rather than signal recovery.
+
+In real array CGH data, the sampling density of probes along the
+genome is not uniform across samples. In fact, we see a sampling
+density between 40 and 4400 kilobases per probe in the neuroblastoma
+data set \texttt{data(neuroblastoma,package="neuroblastoma")}.
+
+
+<<setup,echo=FALSE,results=hide>>=
+
+lambda.hat <- function(lambda, error){
+  l <- which(error == min(error))
+  chosen <- l[ceiling(length(l)/2)]
+  lambda[chosen]
+}
+
+library(breakpointError)
+kmax <- 8
+sample.signal <- function(d){
+  locations <- round(seq(1,length(mu),l=d))
+  last <- as.integer(locations[length(locations)])
+  this.signal <- signal[locations]
+  result <- run.cghseg(this.signal,locations,kmax)
+  result$bases.per.probe <- factor(round(last/d))
+  result$locations <- locations
+  result$signal <- this.signal
+  result$error <- sapply(result$breaks,function(breaks){
+    breakpointError(mu.break.after, breaks, last)
+  })
+  result$crit <- function(lambda,alpha){
+    stopifnot(length(alpha)==1)
+    J <- result$J.est
+    Kseq <- seq_along(J)
+    lambda * Kseq * d^alpha + J
+  }
+  result$lambda <- 10^seq(-9,9,l=200)
+  result$kstar <- function(lambda,a){
+    which.min(result$crit(lambda,a))
+  }
+  result$lambda.error <- function(a){
+    k <- sapply(result$lambda, result$kstar, a)
+    result$error[k]
+  }
+  result$lambda.hat <- function(a){
+    e <- result$lambda.error(a)
+    lambda.hat(result$lambda, e)
+  }
+  result
+}
+  
+set.seed(1)
+seg.size <- c(1,2,1,2)*1e5
+means <- c(-1,0,1,0)
+seg.df <- data.frame()
+mu <- c()
+first.base <- 1
+for(i in seq_along(means)){
+  N <- seg.size[i]
+  seg.mu <- means[i]
+  mu <- c(mu,rep(seg.mu,N))
+  last.base <- first.base+N-1
+  seg.df <- rbind(seg.df,data.frame(first.base,last.base,seg.mu))
+  first.base <- last.base+1
+}
+mu.break.after <- which(diff(mu)!=0)
+norm.sd <- 1
+signal <- rnorm(length(mu), mu, norm.sd)
+## here we define the size of the signals.
+variable.density.signals <- list()
+signal.size <- c(2000,1000,200,50)*length(means)
+n.signals <- length(signal.size)
+for(sig.i in 1:n.signals){
+  cat(sprintf("simulating signal %4d / %4d\n",sig.i,n.signals))
+  d <- signal.size[sig.i]
+  variable.density.signals[[sig.i]] <- sample.signal(d)
+}
+
+@ 
+
+So to construct a penalty that can best adapt to this variation, we
+analyze the following simulation. We create a latent piecewise
+constant signal $\mu\in\RR^D$ over $D=\Sexpr{length(mu)}$ base pairs,
+shown as the blue line in the figure below. We define a signal
+sample size $d_i\in\{ \Sexpr{min(signal.size)}, \dots,
+\Sexpr{max(signal.size)} \}$ for every noisy signal $i\in\{1,\dots,n =
+\Sexpr{n.signals} \}$. Let $y_i\in\RR^{d_i}$ be noisy signal $i$,
+sampled at positions $p_i\in\mathcal X^{d_i}$, with
+$p_{i1}<\cdots<p_{i,d_i}$. We sample every probe $j$ from the
+$y_{ij}\sim N(\mu_{p_{ij}}, \Sexpr{norm.sd} )$ distribution. These
+samples are shown as the black points in the figure below.
+
+<<variable-density-signals,fig=TRUE,results=hide,echo=FALSE,height=3.3>>=
+## now make the signals for plotting.
+variable.density.show <- 
+  variable.density.signals[c(1,length(variable.density.signals))]
+signal.df <- do.call(rbind,lapply(variable.density.show,function(sig){
+  with(sig,data.frame(locations, signal, bases.per.probe))
+}))
+library(ggplot2)
+p <- ggplot(signal.df,aes(locations,signal))+
+  geom_point(pch=21)+
+  geom_segment(aes(first.base-1/2,seg.mu,xend=last.base+1/2,yend=seg.mu),
+               data=seg.df,colour=signal.colors["latent"])+
+  geom_vline(aes(xintercept=first.base-1/2),linetype="dashed",
+             data=seg.df[-1,],colour=signal.colors["latent"])+
+  facet_grid(bases.per.probe~.,
+             labeller=function(var,val)sprintf("bases/probe = %s",val))+
+  xlab("position in base pairs")
+
+print(p)
+@ 
+
+We would like to learn some model complexity parameter $\lambda$ on
+the first noisy signal, and use it for accurate breakpoint detection
+on the second noisy signal. In other words, we are looking for a model
+selection criterion which is invariant to sampling density. 
+
+\newpage
+
+\section{Empirical analysis of simulations}
+
+To determine an optimal penalty for breakpoint detection in simulated
+data, we proceed as follows. For every signal $i$, we use pruned
+dynamic programming to calculate the maximum likelihood estimator
+$\hat y^k_i\in\RR^{d_i}$, for several model sizes
+$k\in\{1,\dots,k_{\text{max}}= \Sexpr{kmax} \}$
+\citep{pruned-dp}. Then, we define the model selection criteria
+\begin{equation}
+  \label{eq:kstar_density}
+  k^\alpha_i(\lambda) =\argmin_k \lambda k d_i^\alpha + 
+  ||y_i-\hat y^k_i||_2^2.
+\end{equation}
+Each of these is a function $k_i^\alpha:\RR^+\rightarrow
+\{1,\dots,k_{\text{max}}\}$ that takes a model complexity tradeoff
+parameter $\lambda$ and returns the optimal number of segments for
+signal $i$. The goal is to find a penalty exponent $\alpha\in\RR$ that
+lets us generalize $\lambda$ between different signals $i$. 
+
+Na\"ively, one may expect that the best exponent is $\alpha=1$, since
+that corresponds to an error term with the average residual. However,
+we will show that this is not the case, by analyzing the
+breakpointError.
+
+To quantify the accuracy of a segmentation for signal $i$, let
+$e_i(k)$ be the breakpointError of the model with $k$ segments.  In
+the figure below, we plot $e_i$ for the 2 simulated signals $i$ shown
+previously. 
+
+<<variable-density-berr-k,fig=TRUE,echo=FALSE,results=hide,height=2>>=
+err.df <- do.call(rbind,lapply(variable.density.show,function(sig){
+  bases.per.probe <- sig$bases.per.probe
+  error <- sig$error
+  data.frame(bases.per.probe,segments=seq_along(error),error)
+}))
+library(ggplot2)
+leg <- "bases/probe"
+bpp.colors <- c("#00bfc4","#f8766d")
+kplot <- ggplot(err.df,aes(segments,error))+
+  geom_line(aes(colour=bases.per.probe))+
+  geom_point()+
+  facet_grid(.~bases.per.probe,
+             labeller=function(var,val)sprintf("bases/probe = %s",val))+
+  scale_colour_manual(leg,values=bpp.colors,guide="none")+
+  scale_x_continuous(minor_breaks=NULL)
+  
+print(kplot)
+@ 
+
+
+
+Now, let us define the penalized
+model breakpoint error $E^\alpha_i:\RR^+\rightarrow\RR^+$ as
+\begin{equation}
+  \label{eq:lerr}
+E^\alpha_i(\lambda) = e_i\left[
+k^\alpha_i(\lambda)
+\right].
+\end{equation}
+In the figure below, we plot these functions for the two signals $i$
+shown previously, and for several penalty exponents $\alpha$.
+
+<<breakpointError,echo=FALSE,results=hide,fig=TRUE,height=2>>=
+lerr.df <- do.call(rbind,lapply(variable.density.show,function(sig){
+  bases.per.probe <- round(max(sig$locations)/length(sig$signal))
+  do.call(rbind,lapply(c(1,1/2,0),function(a){
+    error <- sig$lambda.error(a)
+    lambda <- sig$lambda
+    l.hat <- lambda.hat(lambda, error)
+    optimal <- l.hat == lambda
+    data.frame(error,lambda,alpha=a,bases.per.probe,optimal)
+  }))
+}))
+bpp <- lerr.df$bases.per.probe
+lerr.df$bases.per.probe <- factor(bpp,sort(unique(bpp)))
+library(ggplot2)
+sizes <- c(1,0.5)
+names(sizes) <- names(bpp.colors) <- levels(lerr.df$bases.per.probe)
+p <- ggplot(lerr.df,aes(log10(lambda),error))+
+  geom_line(aes(size=bases.per.probe,colour=bases.per.probe))+
+  geom_point(aes(fill=bases.per.probe),pch=21,data=subset(lerr.df,optimal))+
+  facet_grid(.~alpha,
+             labeller=function(var,val)sprintf("%s = %s",var,val))+
+  scale_size_manual(leg,values=sizes)+
+  scale_fill_manual(leg,values=bpp.colors)+
+  scale_color_manual(leg,values=bpp.colors)
+print(p)
+@ 
+
+The dots
+in the figure show the optimal $\lambda$ found by minimizing the
+penalized model breakpoint detection error:
+\begin{equation}
+  \label{eq:lambda_hat}
+  \hat \lambda^\alpha_i = \argmin_{\lambda\in\RR^+}  E^\alpha_i(\lambda)
+\end{equation}
+
+This figure suggests that $\alpha\approx1/2$ defines a penalty with
+aligned error curves, which will result in $\hat \lambda_i^\alpha$
+values that can be generalized between profiles.
+
+\newpage
+
+Now, we are ready to define 2 quantities that will be able to help us
+choose an optimal penalty exponent~$\alpha$. First, let us consider
+the training error over the entire database:
+\begin{equation}
+  \label{eq:lerr_train}
+  E^\alpha(\lambda) = \sum_{i=1}^n E_i^\alpha(\lambda),
+\end{equation}
+and we define the minimal value of this function as
+\begin{equation}
+  \label{eq:lerr_train_min}
+  E^*(\alpha) = \min_\lambda E^\alpha(\lambda).
+\end{equation}
+In the figure below, we plot these training error functions $E^\alpha$
+(black) and their minimal values $E^*$ (red) for several values of
+$\alpha$.
+
+<<variable-density-error-train,echo=FALSE,results=hide,fig=TRUE,height=2>>=
+a.grid <- c(0,1/2,1)
+lambda <- variable.density.signals[[1]]$lambda
+err.list <- lapply(a.grid,function(a){
+  err.mat <- sapply(variable.density.signals,function(sig){
+    sig$lambda.error(a)
+  })## matrix[lambda,signal]
+  error <- rowSums(err.mat)
+  data.frame(alpha=a,error,lambda,optimal=error==min(error))
+})
+err.curves <- do.call(rbind,err.list)
+dots <- subset(err.curves,optimal)
+opt.err <- do.call(rbind,lapply(err.list,function(df)subset(df,optimal)[1,]))
+library(ggplot2)
+opt.err$text.at <- -8
+opt.err$hjust <- 0
+opt.err$vjust <- -0.5
+on.right <- nrow(opt.err)
+opt.err$text.at[on.right] <- 8
+opt.err$hjust[on.right] <- 1
+opt.err$vjust[on.right] <- -0.5#1.5
+opt.color <- "red"
+p <- ggplot(,aes(log10(lambda),error))+
+  geom_line(lwd=1.1,data=err.curves)+
+  ##geom_point(pch=1,size=4,data=dots)+
+  geom_segment(aes(yend=error,xend=text.at),data=opt.err,
+               colour=opt.color)+
+  geom_text(aes(text.at,label=round(error,1),hjust=hjust,vjust=vjust),
+            data=opt.err,colour=opt.color)+
+  facet_grid(.~alpha,labeller=function(var,val)sprintf("%s = %s",var,val))
+print(p)
+@   
+
+It is clear that the minimum training error is found for some penalty
+exponent $\alpha$ near 1/2, and we would like to find the precise
+$\alpha$ that results in the lowest possible minimum $E^*(\alpha)$.
+
+We also consider the test error over all pairs of signals when
+training on one and testing on another:
+\begin{equation}
+  \label{eq:lerr_test}
+  \text{TestErr}(\alpha) = 
+\sum_{i\neq j} E^\alpha_i(\hat \lambda_j^\alpha).
+\end{equation}
+
+In the figure below, we plot $E^*$ and TestErr for a grid of $\alpha$
+values.
+
+<<variable-density-error-alpha,echo=FALSE,results=hide,fig=TRUE,height=3>>=
+
+estimate.error <- function(a,train,test){
+  l.hat <- train$lambda.hat(a)
+
+  test.k <- test$kstar(l.hat,a)
+  test$error[test.k]
+}
+
+test.all.pairs <- function(a,signal.list){
+  n.signals <- length(signal.list)
+  test.error <- c()
+  for(i in 1:(n.signals-1)){
+    cat(sprintf("alpha=%10f signal %5d / %5d\n",a,i,n.signals-1))
+    for(j in (i+1):n.signals){
+      err <- estimate.error(a,signal.list[[i]],signal.list[[j]])
+      err2 <- estimate.error(a,signal.list[[j]],signal.list[[i]])
+      test.error <- c(test.error,err,err2)
+    }
+  }
+  test.error
+}
+
+a.df <- data.frame()
+a.grid <- c(2,seq(0,1.5,by=0.1),-0.5,-1,0.45,0.55)
+for(a in a.grid){
+  test.error <- test.all.pairs(a,variable.density.signals)
+  err.df <- data.frame(test.error,pair=seq_along(test.error),alpha=a)
+  a.df <- rbind(a.df,err.df)
+}
+
+train.df <- do.call(rbind,lapply(a.grid,function(a){
+  err.mat <- sapply(variable.density.signals,function(sig){
+    sig$lambda.error(a)
+  })## matrix[lambda,signal]
+  error <- rowSums(err.mat)
+  data.frame(alpha=a,mean=min(error),sd=NA,what="train")
+}))
+test.df <- do.call(rbind,lapply(a.grid,function(a){
+  test <- subset(a.df,alpha == a)
+  data.frame(alpha=a,mean=mean(test$test.error),
+             sd=sd(test$test.error),what="test")
+}))
+stat.df <- rbind(train.df,test.df)
+library(ggplot2)
+p <- ggplot(stat.df,aes(alpha,mean))+
+  geom_ribbon(aes(ymin=ifelse(mean-sd<0,0,mean-sd),ymax=mean+sd),alpha=1/2)+
+  geom_line()+
+  facet_grid(what~.,scales="free")
+print(p)
+@ 
+
+It is clear that an optimal penalty is given by
+$\alpha=1/2$. This corresponds to the following model selection
+criterion which is invariant to sampling density:
+\begin{equation}
+  \label{eq:var_dens_opt_pen}
+  k_i(\lambda) = \argmin_k \lambda k \sqrt{d_i}+||y_i-\hat y_i^k||^2_2
+\end{equation}
+
+\newpage
+
+\section{Discussion of related theoretical results}
+
+As explained by \citet{sylvain-survey}, a model selection procedure
+can be either efficient or consistent. An efficient procedure for
+model estimation accurately recovers the latent signal, whereas a
+consistent procedure for model identification accurately recovers the
+breakpoints. Since we consider the breakpoint detection error, we are
+attempting to construct a consistent penalty, not an efficient
+penalty.
+
+In general terms, the fact that we find a nonzero exponent $\alpha$
+for our $d_i^\alpha$ penalty term agrees with other results. In
+particular, \citet{vfold} proposed an optimal procedure to select model
+complexity parameters in cross-validation by normalizing by the sample
+size $d_i$. 
+% This is in
+% intuitive agreement with our result that we need to normalize by the
+% sample size $d_i$, although they do not use the square root term
+% $\sqrt{d_i}$.
+
+The $\sqrt{d_i}$ term that we find here using simulations is in
+agreement with \citet{aurelie}, who use finite sample model selection
+theory to find a $\sqrt{d_i}$ term in a penalty optimal for
+clustering.
+
+When theoretically deriving an efficient penalty for change-point
+model estimation in the non-asymptotic setting, \citet{lebarbier}
+obtained a $\log d_i$ term. This contrasts our result, which examines
+the identification problem using the breakpoint error and obtains a
+$\sqrt{d_i}$ term. But in fact this is in agreement with classical
+results that AIC underpenalizes with respect to the BIC, as shown in
+the table below.
+
+\begin{center}
+  \centering
+  \begin{tabular}{cc|cc}
+     Estimation & Penalty & Identification & Penalty \\
+     Model & Term & Model & Term\\
+     \hline
+     AIC & 2 & BIC & $\log d_i$\\
+     Lebarbier & $\log d_i$ & This work & $\sqrt{d_i}$\\
+  \end{tabular}
+\end{center}
+
+Comparing our results with Lebarbier, 
+in the context of classical results involving AIC and BIC. 
+The BIC is designed for model identification and penalizes more than the AIC.
+Likewise, our penalty examines model identification using the breakpoint
+detection error, and penalizes more than the efficient penalty proposed
+by Lebarbier.
+
+\bibliographystyle{abbrvnat}
+
+\bibliography{refs}
+
+\end{document}

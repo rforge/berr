@@ -1,0 +1,525 @@
+\documentclass{article}
+
+\usepackage{fullpage}
+
+\usepackage{natbib}
+\usepackage{tikz}
+\usepackage{amsmath,amssymb}
+\newcommand{\RR}{\mathbb R}
+\newcommand{\argmin}{\operatorname*{arg\, min}}
+\newcommand{\pkg}[1]{\textbf{#1}}
+\newcommand{\code}[1]{#1}
+\newcommand{\rileft}[1][i]{\underline r_{#1}}
+\newcommand{\riright}[1][i]{\overline r_{#1}}
+
+\begin{document}
+
+%\VignetteIndexEntry{Definition of the breakpointError}
+\title{Definition of the breakpointError}
+\author{Toby Dylan Hocking}
+\maketitle
+
+
+This vignette discusses the mathematical definition of the
+breakpointError which can be calculated using this R package. Given a
+latent piecewise constant signal $\mu\in\RR^D$ defined on bases
+$1,\dots,D$, we can calculate the positions $B\subseteq
+\{1,\dots,D-1\}$ after which it changes. We use these breakpoint
+positions $B$ to define a precise breakpointError function that can be
+used to quantify the accuracy of a set of breakpoint guesses
+$G\subseteq\{1,\dots,D-1\}$. The breakpointError was originally
+introduced as the exact breakpoint error by \citet[Chapter
+4]{hocking-phd}.
+
+\section{Setup: recovering breakpoints from noisy observations}
+\label{breakpoint_error}
+
+We assume there is a chromosome with $D$ base pairs. Let $\mathcal X=
+\{1,\dots,D\}$ be all the base pairs, and let $\mathbb
+B=\{1,\dots,D-1\}$ be all bases after which a break is possible.  In
+simulations, we assume there is some latent piecewise constant signal
+$\mu\in\RR^D$ defined at each of those bases.
+
+<<setup,echo=FALSE,results=hide>>=
+library(breakpointError)
+latent <- c()
+latent.segs <- data.frame()
+first <- 1
+for(mu in c(-2,0,2)){
+  size <- 30
+  last <- first + size -1
+  latent.segs <- rbind(latent.segs,data.frame(first,last,mean=mu))
+  latent <- c(latent,rep(mu,size))
+  first <- last+1
+}
+latent.breaks <- estimateBreaks(latent)
+atcg <- sample(c("A","T","C","G"),length(latent),replace=TRUE)
+plotsig <- function(main){
+  plot(0,0,xlab="base",ylab="signal",type="n",
+       las=1,xaxt="n",xlim=c(1,length(latent)),ylim=c(-5,3),main=main)
+  axis(1,c(1,latent.breaks,length(latent)))
+  text(seq_along(latent),-5,atcg,cex=0.5)
+}
+@ 
+
+<<latent,fig=TRUE,height=3,width=7>>=
+plotsig("Latent signal (horizontal lines) and breakpoints (vertical dashed lines)")
+print(latent.segs)
+## The segment from base i to base j is drawn from i-1/2 to j+1/2.
+with(latent.segs,segments(first-1/2,mean,last+1/2,mean,col=signal.colors["latent"]))
+## And if there is a break after base i, it should be drawn at i+1/2.
+abline(v=latent.breaks+1/2,col=signal.colors["latent"],lty="dashed")
+@ 
+
+\newpage
+
+We sample some noisy signal $y\in\RR^{d}$ at base positions $p\in\mathcal
+X^{d}$. 
+
+<<latent-noisy,fig=TRUE,height=3,width=7>>=
+set.seed(1)
+d <- 18
+base <- sort(sample(seq_along(latent), d))
+signal <- rnorm(d, latent[base])
+plotsig("Noisy observations (black points) and latent signal (blue lines)")
+points(base, signal)
+with(latent.segs,segments(first-1/2,mean,last+1/2,mean,col=signal.colors["latent"]))
+abline(v=latent.breaks+1/2,col=signal.colors["latent"],lty="dashed")
+@ 
+
+In the plot above, the latent signal $\mu$ is drawn using blue lines,
+and the noisy signal $(p,y)$ is drawn using black points. We will use
+models to estimate the latent signal, given only the noisy
+observations.
+
+\newpage
+
+We will focus on the cghseg model. First, order the vectors of
+observations such that the positions are in increasing order
+$p_1<\cdots<p_d$. Then, we define the estimated signal with $k$
+segments as
+\begin{equation}
+\label{eq:yhat^k}
+\begin{aligned}
+\hat y^k = &\argmin_{x\in\RR^d} &&  ||y - x||^2_2
+\\
+&\text{subject to} && k-1=\sum_{j=1}^{d-1} 1_{x_j\neq x_{j+1}}.
+\end{aligned}
+\end{equation}
+Note that we can quickly calculate $\hat y^k$ for
+$k\in\{1,\dots,k_{\text{max}}\}$ using pruned dynamic programming
+\citep{pruned-dp}. This is implemented in the R package \pkg{cghseg},
+and the \pkg{breakpointError} package includes the \code{run.cghseg}
+function which returns a list \code{L} of results. The estimated
+segments can be found as a data.frame in \code{L\$segments}.
+
+<<estimated,fig=TRUE,height=3,width=7>>=
+plotsig("Noisy observations (black points) and estimated signal (green lines)")
+points(base, signal)
+kmax <- 6
+L <- run.cghseg(signal, base, kmax)
+k <- 3
+yhat <- subset(L$segments,segments==k)
+print(yhat)
+with(yhat,segments(first.base,mean,last.base,mean,col=signal.colors["estimate"]))
+abline(v=yhat$first.base[-1],col=signal.colors["estimate"],lty="dashed")
+@ 
+
+The cghseg model tells us the points after which a break occurs, not
+the bases. So we define the estimated breakpoint locations shown as
+vertical green dashed lines using the mean
+\begin{equation}
+  \label{eq:breaks}
+\phi(\hat y^k,p)
+= \big\{
+\lfloor 
+(p_j+p_{j+1})/2
+\rfloor
+\text{ for all }j\in\{1,\dots,d-1\}\text{ such that }
+\hat y^k_j\neq \hat y^k_{j+1}
+\big\}.
+\end{equation}
+Note that this is a function $\phi:\RR^d\times \mathcal X^d\rightarrow
+2^{\mathbb B}$ that gives the positions after which there is a break
+in $\hat y^k$.
+
+<<shown-break>>=
+print(L$breaks[[k]])
+@ 
+
+\newpage
+
+For the cghseg model with $k$ segments, let $G_k\subseteq \mathbb B$
+denote the estimated positions after which a break occured. These can
+be found in \code{L\$breaks} as a list of $k_{\text{max}}$ vectors.
+
+<<breaks>>=
+str(L$breaks)
+@ 
+
+We would like to compare these estimated breakpoints to the
+exact set of breakpoints in the simulated signal
+\begin{equation}
+  \label{eq:breaks}
+  B = \phi\left(\mu,
+\left[
+  \begin{array}{ccc}
+    1 & \cdots & D
+  \end{array}
+\right]^\prime
+\right)
+=
+\{j\in\mathbb B:\mu_j\neq\mu_{j+1}\}.
+\end{equation}
+
+<<latent-breaks>>=
+print(latent.breaks)
+@ 
+
+The breakpointError package defines a function $E:2^{\mathbb
+  B}\rightarrow \RR^+$ based on the latent breakpoints. Given a guess
+of the breakpoints $G\subseteq \mathbb B$, we quantify its error with
+$E(G)$. We can then select the number of segments
+$k\in\{1,\dots,k_{\text{max}}\}$ which minimizes the error $E(G_k)$.
+
+\section{Properties of an ideal error function for breakpoint
+  detection}
+
+Given some guess of the breakpoint locations $G\subseteq\mathbb B$, we
+would like to to define a function $E(G)$ that quantifies how bad the
+breakpoint location guess was. We would like the function $E:
+2^{\mathbb B}\rightarrow \RR^+$ to satisfy:
+
+\begin{itemize}
+\item \textbf{(correctness)} Guessing exactly right costs nothing: $E(B)=0$.
+\item \textbf{(precision)} A guess closer to a real breakpoint is less
+  costly:\\if $B=\{b\}$ and $0\leq i<j$, then
+  $E(\{b+i\})\leq E(\{b+j\})$ and
+  $E(\{b-i\})\leq E(\{b-j\})$.
+% In
+%   fact, we will see that when we know the exact breakpoint locations
+%   in simulated signals, we can construct a cost function that verifies
+%   the strict inequality $<$. In real data, we will use the annotation
+%   error which only verifies the weak inequality $\leq$.
+\item \textbf{(FP)} False positive breakpoints are
+  bad: if $b\in B$ and $g\not\in B$, then $E(\{b\}) <
+  E(\{b,g\})$.
+\item \textbf{(FN)} Undiscovered breakpoints are bad:
+  $b\in B\Rightarrow E(\{b\}) < E(\emptyset)$.
+\end{itemize}
+
+When the latent signal is available in simulations, we can use the
+exact breakpoint locations $B$ to define the breakpointError $E$,
+which satisfies all 4 properties.
+
+\newpage
+
+\section{Definition of the breakpointError for simulated signals}
+\label{sec:breakpoint_error}
+
+In this section, we use the exact breakpoint locations $B$ to define a
+breakpoint detection error function.
+
+We define the error of a breakpoint location guess $g\in\mathbb
+B$ as a function of the closest breakpoint in $B$. So
+first we put the breaks in order, by writing them as $B_1<\cdots<
+B_n$, with each $B_i\in\mathbb B$. Then, we define a set of intervals
+$R_B=\{r_1,\dots,r_n\}$ that form a partition of $\mathbb B$. For each
+breakpoint $B_i$ we define the region
+$r_i=[\rileft,\riright]\in\mathbb I \mathbb B$, where $\mathbb
+I\mathbb B\subset 2^{\mathbb B}$ denotes the set of all intervals of
+$\mathbb B$. We take the notation conventions from the interval
+analysis literature \citep{intervals}.
+
+We define the right limit of region $i$ as
+\begin{equation}
+  \label{eq:R_i}
+\riright
+=
+  \begin{cases}
+    D-1 & \text{if } i=n \\
+    \lfloor (B_{i+1}+B_i)/2 \rfloor & \text{otherwise}
+  \end{cases}
+\end{equation}
+and
+the left limit as
+\begin{equation}
+  \label{eq:L_i}
+  \rileft =
+  \begin{cases}
+    1 & \text{if } i=1 \\
+    \riright[i-1]+1 & \text{otherwise}.
+  \end{cases}
+\end{equation}
+
+
+<<breakpoint-error-pieces,echo=FALSE,results=hide>>=
+make.fun <- function(L,x,R){
+  force(L)
+  force(x)
+  force(R)
+  function(g){
+    ifelse(g<L,1,{
+      ifelse(g<x,(x-g)/(x-L),{
+        ifelse(g<R,(g-x)/(R-x),1)
+      })
+    })
+  }
+}
+
+pieces <- make.fun(1,5,7)
+
+make.args <- function(break.vec,signal.size){
+  stopifnot(is.vector(break.vec))
+  stopifnot(length(break.vec)>0)
+  args.list <- list()
+  for(i in seq_along(break.vec)){
+    x <- break.vec[i]
+    left <- if(i == 1){
+      1
+    }else{
+      right+1
+    }
+    right <- if(i == length(break.vec)){
+      signal.size-1
+    }else{
+      floor((x+break.vec[i+1])/2)
+    }
+    args.list[[i]] <- list(left,x,right)
+  }
+  args.list
+}
+
+set.seed(1)
+reduce.by <- 3
+offset.by <- 100
+seg.mean <- c(-1,0,0.5)/reduce.by+offset.by
+seg.size <- c(4,10,8)
+ends <- cumsum(seg.size)+1 # up to not including this base
+starts <- ends-seg.size
+seg.df <- data.frame(starts,ends,seg.mean,what="signal")
+breaks <- ends[-length(ends)]-1
+size <- ends[length(ends)]-1
+base.df <- data.frame(base=sample(c("A","T","C","G"),size,replace=TRUE),
+                      position=1:size,what="signal",signal=-0.5/reduce.by+offset.by)
+last.break <- size-1
+piece.args <- make.args(breaks,size)
+## label the region definition.
+regions.df <- do.call(rbind,lapply(seq_along(piece.args),function(i){
+  L <- piece.args[[i]]
+  base <- unlist(L)
+  symbol <- sprintf(c("$\\underline r_%d$","$B_%d$","$\\overline r_%d$"),i)
+  hjust <- c(0,0,1)
+  data.frame(base,symbol,what="error",cost=1.3,hjust,i)
+}))
+piece.funs <- lapply(piece.args,function(L)do.call(make.fun,L))
+base <- 1:last.break
+midpoints <- breaks[-1]-diff(breaks)/2
+knots <- sort(c(-Inf,regions.df$base,Inf))
+point.df <- do.call(rbind,lapply(seq_along(breaks),function(i){
+  fun <- piece.funs[[i]]
+  cost <- fun(base)
+  data.frame(cost,base,i,what="error")
+}))
+text.df <- do.call(rbind,lapply(seq_along(piece.args),function(i){
+  L <- piece.args[[i]]
+  this.curve <- point.df[point.df$i==i,]
+  min.point <- this.curve[which.min(this.curve$cost),]
+  label <- sprintf("$\\ell_%d = C_{%d,%d,%d}$",i,L[[1]],L[[2]],L[[3]])
+  data.frame(min.point,label)
+}))
+text.df$base <- text.df$base+c(1.5,2)
+fun.df <- do.call(rbind,lapply(seq_along(breaks),function(i){
+  fun <- piece.funs[[i]]
+  cost <- fun(knots)
+  data.frame(cost,base=knots,i,what="error")
+}))
+break.df <- do.call(rbind,lapply(seq_along(breaks),function(i){
+  data.frame(base=breaks[i],i,what="error")
+}))
+
+library(ggplot2)
+library(breakpointError)
+x.breaks <- c(regions.df$base,
+              max(point.df$base)+1)
+p <- ggplot()+
+  geom_text(aes(base,cost,colour=factor(i),
+                label=symbol,hjust=hjust),
+            data=regions.df,vjust=1)+
+  geom_point(aes(base,cost,group=i,colour=factor(i)),
+             data=point.df,pch=1,size=3)+
+  geom_line(aes(base,cost,group=i,colour=factor(i),size=factor(i)),
+            data=fun.df)+
+  geom_rug(data=break.df)+
+  scale_size_manual(values=c("1"=1.5,"2"=0.8)*1.5)+
+  ##theme(title="Exact breakpoint error functions")+
+  geom_segment(aes(starts-0.5,seg.mean,xend=ends-0.5,yend=seg.mean),
+               data=seg.df,lwd=2,colour=signal.colors["latent"])+
+  facet_grid(what~.,scales="free",space="free")+
+  geom_text(aes(position,signal,label=base),data=base.df,size=3)+
+  geom_text(aes(base,cost,group=i,colour=factor(i),label=label),
+            data=text.df,hjust=0,vjust=-0.5)+
+  guides(colour="none",size="none")+
+  scale_y_continuous("",breaks=c(1,0),minor_breaks=NULL)+
+  scale_x_continuous(breaks=x.breaks,minor_breaks=NULL)
+
+library(tikzDevice)
+options(tikzDocumentDeclaration=("\\documentclass[11pt]{article}"),
+        tikzMetricsDictionary="tikzMetrics")
+tikz("breakpoint-error-pieces.tex",w=5,h=2.5)
+print(p)
+dev.off()
+@ 
+
+
+
+Intuitively, if we observe a breakpoint guess $g\in r_i$, then its
+closest breakpoint is $B_i$. To define the best guess in each region,
+we use piecewise linear functions $C_{\underline r,b,\overline r}:\RR\rightarrow[0,1]$
+defined as follows:
+\begin{equation}
+  \label{eq:cLxR}
+  C_{\underline r,b,\overline r}(g) =
+  \begin{cases}
+    0 & \text{if }g=b \\
+    (b-g)/(x-\underline r) & \text{if } \underline r< g< b \\
+    (g-b)/(\overline r-x) & \text{if } b< g< \overline r\\
+    1 & \text{ otherwise}.
+  \end{cases}
+\end{equation}
+For each breakpoint $i$ we measure the precision of a guess
+$g\in\mathbb B$ using
+\begin{equation}
+  \label{eq:ell_i_exact}
+  \ell_i(g)=C_{\rileft,B_i,\riright}(g).
+\end{equation}
+These functions are shown in the figure below for a small signal with
+2 breakpoints. Additionally, the breakpoints $B_i$ and regions $r_i$
+are labeled. The signal $\mu\in\RR^{22}$ has 2 breakpoints:
+$B=\{4,14\}$.
+\begin{center}
+  \input{breakpoint-error-pieces}
+\end{center}
+
+
+\newpage
+
+Now, we are ready to define the exact breakpointError of a set of
+guesses $G\subseteq\mathbb B$.
+%We will use $i$ for the index of the
+%breakpoints $B_i$ and $j$ for the index of the guesses $G_j$. 
+First, let $G \cap r$ be the subset of guesses $G$ that fall in
+region~$r$. 
+
+Then, we define the false negative rate for region $r$ as 
+\begin{equation}
+  \label{eq:FN_i}
+  \text{FN}(G,r) = 
+  \begin{cases}
+    1 & \text{if } G\cap r = \emptyset\\
+    0 & \text{otherwise}
+  \end{cases}
+\end{equation}
+and the false positive rate for region $r$ as
+\begin{equation}
+  \label{eq:FP_i}
+  \text{FP}(G,r) =
+  \begin{cases}
+    0 & \text{if }G\cap r = \emptyset\\
+    |G\cap r|-1 &\text{otherwise}
+  \end{cases}
+\end{equation}
+and the imprecision of the best guess in region $r$ as
+\begin{equation}
+  \label{eq:imprecision}
+  I(G,r,\ell) =
+  \begin{cases}
+    0 & \text{if } G\cap r = \emptyset\\
+    \min_{g\in G\cap r} \ell(g) & \text{otherwise}.
+  \end{cases}
+\end{equation}
+When there are no breakpoints, we have $B=\emptyset$ and
+$R_B=\emptyset$. But we still would like to quantify the false
+positives, so let $G\setminus\big( \cup R_B\big) $ be the set of
+guesses $G$ outside of the breakpoint regions $R_B$. Finally, we
+define the exact breakpointError of guess $G$ with respect to the true
+breakpoints $B$ as
+\begin{equation}
+  \label{eq:exact_breakpoint_cost}
+  E(G) =
+  \big|G\setminus(\cup R_B)\big|
+ + \sum_{i=1}^{|B|}\text{FP}(G,r_i)+\text{FN}(G,r_i)+I(G,r_i,\ell_i).
+\end{equation}
+
+
+To calculate the exact breakpoint error, we first sort lists of
+$n=|B|$ and $m=|G|$ items. Using the quicksort algorithm, this
+requires $O(n\log n + m\log m)$ operations in the average case
+\citep{clrs}. Once sorted, the components of the cost can be
+calculated in linear time $O(n + m)$. So, overall the calculation of
+the error can be accomplished in best case $O(n + m)$, average case
+$O(n\log n + m\log m)$ operations. It is implemented in the
+\code{errorDetails} function in
+\texttt{breakpointError/src/breakpointError.c}.
+
+\section{R functions for calculating the breakpointError}
+
+There are several ways to calculate the breakpointError. The simplest
+is via the \code{breakpointError} function, which takes the guesses,
+latent breakpoints, and latent signal size. It returns the
+breakpointError of the guesses as a numeric scalar.
+
+<<breakpointError>>=
+breakpointError(L$breaks[[3]], latent.breaks, length(latent))
+sapply(L$breaks, breakpointError, latent.breaks, length(latent))
+@ 
+
+Note that the minimum breakpointError occurs for $k=3$ segments, or 2
+breakpoints, which is expected for the signal with 3 segments that we
+saw earlier.
+
+\newpage
+
+For a bit more detail, the \code{errorComponents} function can be used
+to get the FP, FN, and $I$ components for each model.
+
+<<components,fig=TRUE,height=3,width=7>>=
+e <- errorComponents(L$breaks, latent.breaks, length(latent))
+library(reshape2)
+dcast(e,segments~type,value.var="error")
+library(ggplot2)
+p <- ggplot(e,aes(segments,error))+
+  geom_line(aes(size=type,colour=type,linetype=type))+
+  scale_linetype_manual(values=fp.fn.linetypes)+
+  scale_colour_manual(values=fp.fn.colors)+
+  scale_size_manual(values=fp.fn.sizes)
+library(directlabels)
+dl <- direct.label(p+guides(linetype="none",colour="none",size="none"),
+                   dl.combine("first.qp","last.qp"))
+print(dl)
+@ 
+
+\newpage
+
+For extreme detail, the errorDetails function can be used. It returns
+a list with several components, which count the error of each break
+region and guess.
+
+<<details>>=
+str(errorDetails(L$breaks[[2]], latent.breaks, length(latent)))
+str(errorDetails(L$breaks[[4]], latent.breaks, length(latent)))
+@ 
+
+The \code{guess.unidentified} component will be positive only when
+there are no real breaks.
+
+<<guess.unidentified>>=
+str(errorDetails(c(2,6,7), c(), 10))
+@ 
+
+\bibliographystyle{abbrvnat}
+
+\bibliography{refs}
+
+\end{document}
+

@@ -1,0 +1,13 @@
+citHeader("To cite the breakpointError please use:")
+citEntry("phdthesis","
+Toby Dylan Hocking.
+Learning algorithms and statistical software,
+with applications to bioinformatics.
+PhD thesis, chapter 4.
+Ecole Normale Superieure de Cachan, France, 2012.
+",
+author="Toby Dylan Hocking",
+chapter="4",
+school="Ecole Normale Superieure de Cachan, France",
+title="Learning algorithms and statistical software, with applications to bioinformatics",
+year="2012")
