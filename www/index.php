@@ -43,7 +43,28 @@ echo $contents; } ?>
 
 <!-- end of project description -->
 
-<p> No content added. </p>
+<p>The breakpointError package provides a fast C implementation of
+the breakpointError function, which is useful for segmentation model
+selection. To install the package, do
+</p>
+
+<pre>
+install.packages("SegAnnot",repos="http://r-forge.r-project.org")
+</pre>
+
+<p>To read the definition of the breakpointError, do</p>
+
+<pre>
+vignette("breakpointError",package="breakpointError")
+</pre>
+
+<p>To read about an application of the breakpointError function for
+  design of a penalty for optimal breakpoint detection in signals of
+  varying sampling density, do</p>
+
+<pre>
+vignette("variableDensity",package="breakpointError")
+</pre>
 
 <p> The <strong>project summary page</strong> you can find <a href="http://<?php echo $domain; ?>/projects/<?php echo $group_name; ?>/"><strong>here</strong></a>. </p>
 
