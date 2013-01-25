@@ -149,9 +149,10 @@ print(L$breaks[[k]])
 
 \newpage
 
-For the cghseg model with $k$ segments, let $G_k\subseteq \mathbb B$
-denote the estimated positions after which a break occured. These can
-be found in \code{L\$breaks} as a list of $k_{\text{max}}$ vectors.
+For the cghseg model with $k$ segments, let $G_k = \phi(\hat y^k, p)
+\subseteq \mathbb B$ denote the estimated positions after which a
+break occured. These can be found in \code{L\$breaks} as a list of
+$k_{\text{max}}$ vectors.
 
 <<breaks>>=
 str(L$breaks)
