@@ -379,7 +379,7 @@ $\alpha=1/2$. This corresponds to the following model selection
 criterion which is invariant to sampling density:
 \begin{equation}
   \label{eq:var_dens_opt_pen}
-  k_i(\lambda) = \argmin_k \lambda k \sqrt{d_i}+||y_i-\hat y_i^k||^2_2
+  k^{1/2}_i(\lambda) = \argmin_k \lambda k \sqrt{d_i}+||y_i-\hat y_i^k||^2_2
 \end{equation}
 
 \newpage
