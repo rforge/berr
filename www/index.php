@@ -49,7 +49,7 @@ selection. To install the package, do
 </p>
 
 <pre>
-install.packages("SegAnnot",repos="http://r-forge.r-project.org")
+install.packages("breakpointError",repos="http://r-forge.r-project.org")
 </pre>
 
 <p>To read the definition of the breakpointError, do</p>
