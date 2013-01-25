@@ -171,9 +171,13 @@ signal $i$. The goal is to find a penalty exponent $\alpha\in\RR$ that
 lets us generalize $\lambda$ between different signals $i$. 
 
 Na\"ively, one may expect that the best exponent is $\alpha=1$, since
-that corresponds to an error term with the average residual. However,
-we will show that this is not the case, by analyzing the
-breakpointError.
+that corresponds to an error term with the average residual:
+\begin{equation}
+  \label{eq:av-resid}
+  k_i^1(\lambda) = \argmin_k \lambda k + ||y_i- \hat y_i^k||^2_2/d_i.
+\end{equation}
+However, we will show that this penalty is not optimal, by analyzing
+the breakpointError.
 
 To quantify the accuracy of a segmentation for signal $i$, let
 $e_i(k)$ be the breakpointError of the model with $k$ segments.  In
