@@ -461,7 +461,7 @@ calculated in linear time $O(n + m)$. So, overall the calculation of
 the error can be accomplished in best case $O(n + m)$, average case
 $O(n\log n + m\log m)$ operations. It is implemented in the
 \code{errorDetails} function in
-\texttt{breakpointError/src/breakpointError.c}.
+\texttt{berr/pkg/src/breakpointError.c}.
 
 \section{R functions for calculating the breakpointError}
 
