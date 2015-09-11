@@ -3,7 +3,7 @@
 \docType{data}
 \title{fp fn sizes}
 \description{Sizes to use when drawing curves for FP, FN, ...}
-\usage{fp.fn.sizes}
+\usage{"fp.fn.sizes"}
 
 
 

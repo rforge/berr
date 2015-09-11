@@ -3,11 +3,7 @@
 \title{errorComponents}
 \description{Create a data.frame of components of the breakpointError that is
 easy to plot.}
-\usage{
-errorComponents(guess.list,
-breaks,
-last.base)
-}
+\usage{errorComponents(guess.list, breaks, last.base)}
 \arguments{
   \item{guess.list}{List of integer vectors of guesses.}
   \item{breaks}{Integer vector of bases after which there is a break in the latent

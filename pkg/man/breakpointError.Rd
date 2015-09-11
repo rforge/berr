@@ -3,11 +3,7 @@
 \title{breakpointError}
 \description{Calculate the exact breakpoint error. We assume there is a latent
 piecewise constant signal defined on 1,...,last.base.}
-\usage{
-breakpointError(guess,
-breaks,
-last.base)
-}
+\usage{breakpointError(guess, breaks, last.base)}
 \arguments{
   \item{guess}{Integer vector of bases after which you estimate a break occured.}
   \item{breaks}{Integer vector of bases after which there are breaks in the latent

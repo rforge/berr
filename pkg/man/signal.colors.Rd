@@ -3,7 +3,7 @@
 \docType{data}
 \title{signal colors}
 \description{Colors to use when drawing signals.}
-\usage{signal.colors}
+\usage{"signal.colors"}
 
 
 

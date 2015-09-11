@@ -3,10 +3,7 @@
 \title{estimateBreaks}
 \description{Estimate the base positions after which a break occured in the
 latent signal, given an imperfect estimate.}
-\usage{
-estimateBreaks(estimate,
-base = seq_along(estimate))
-}
+\usage{estimateBreaks(estimate, base = seq_along(estimate))}
 \arguments{
   \item{estimate}{Numeric vector: the estimated signal.}
   \item{base}{Integer vector: the base positions where the estimated signal was

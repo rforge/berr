@@ -1,7 +1,7 @@
 Package: breakpointError
-Maintainer: Toby Dylan Hocking <toby@sg.cs.titech.ac.jp>
+Maintainer: Toby Dylan Hocking <tdhock5@gmail.com>
 Author: Toby Dylan Hocking
-Version: 1.0
+Version: 2015.09.11
 License: GPL-3
 Title: Breakpoint detection error
 Description: Functions for calculating the breakpoint detection error,
