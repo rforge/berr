@@ -37,10 +37,10 @@ run.cghseg <- structure(function
   if(any(diff(base) < 0)){
     stop("need to sort signal so bases are increasing")
   }
-  require(cghseg)
   n <- length(Y)
   kmax <- min(maxSegments,n)#k is the number of SEGMENTS not BREAKPOINTS
-  result <- cghseg:::segmeanCO(Y,kmax)
+  segmeanCO <- get("segmeanCO", envir=asNamespace("cghseg"))
+  result <- segmeanCO(Y,kmax)
   result$segments <- data.frame()
   result$breaks <- list()
   result$break.df <- data.frame()
@@ -88,7 +88,7 @@ run.cghseg <- structure(function
                  data=result$segments,colour=signal.colors[["estimate"]],lwd=3)+
     geom_vline(aes(xintercept=base),data=result$break.df,
                colour=signal.colors[["estimate"]],linetype="dashed")+
-    facet_grid(segments~.,labeller=function(var,val)sprintf("%s segments",val))
+    facet_grid(segments~.,labeller=label_both)
 })
 
 estimateBreaks <- structure(function

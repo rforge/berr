@@ -34,5 +34,5 @@ ggplot()+
                data=result$segments,colour=signal.colors[["estimate"]],lwd=3)+
   geom_vline(aes(xintercept=base),data=result$break.df,
              colour=signal.colors[["estimate"]],linetype="dashed")+
-  facet_grid(segments~.,labeller=function(var,val)sprintf("\%s segments",val))
+  facet_grid(segments~.,labeller=label_both)
 }

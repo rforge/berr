@@ -1,11 +1,11 @@
 Package: breakpointError
-Maintainer: Toby Dylan Hocking <tdhock5@gmail.com>
+Maintainer: Toby Dylan Hocking <toby.hocking@r-project.org>
 Author: Toby Dylan Hocking
-Version: 2015.09.11
+Version: 2016.10.25
 License: GPL-3
 Title: Breakpoint detection error
 Description: Functions for calculating the breakpoint detection error,
 	     which quantifies the number of false positive and false
 	     negative breakpoint detections when the latent breakpoint
 	     positions are known.
-Suggests: cghseg, ggplot2, directlabels, quadprog, tikzDevice, reshape2
+Suggests: cghseg, ggplot2 (>= 2.0), directlabels, quadprog, tikzDevice, reshape2, flsa

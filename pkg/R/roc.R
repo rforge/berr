@@ -1,4 +1,13 @@
-errorRates <- structure(function(guess.list, break.vec, last.base){
+errorRates <- structure(function
+### Compute false positive and false negative rates in order to draw
+### ROC curves.
+(guess.list,
+### List of integer vectors, model guesses.
+ break.vec,
+### Integer vector, breakpoints in true signal.
+ last.base
+### Integer scalar, last base in true signal.
+ ){
   stopifnot(is.list(guess.list))
   stopifnot(is.integer(last.base))
   stopifnot(length(last.base)==1)
@@ -24,6 +33,7 @@ errorRates <- structure(function(guess.list, break.vec, last.base){
                  row.names=NULL)
   }
   do.call(rbind, error.by.model)
+### data.frame with columns FP, FN, FPR, FNR, TPR.
 }, ex=function(){
   seg.size <- 100
   means <- c(-3,0,3,0,2,-1,3)/3
